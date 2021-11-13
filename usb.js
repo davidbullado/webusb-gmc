@@ -1,4 +1,13 @@
 var resultReader = () => {};
+var defaultReader = (result) => {
+  let hex = buf2hex(new Uint8Array(result.data.buffer));
+  printOut(`Default Reader: hex=${hex}`);
+}
+var heartbeatReader = (result) => {
+  cpm = 0x3FFF & result.data.getUint16();
+  printOutCPS(`CPS: ${cpm}`);
+}
+var heartbeatIsON = false;
 var device;
 
 /**
@@ -6,6 +15,13 @@ var device;
  * @param {string} str 
  */
 var printOut = (str) => {
+  console.log(str);
+}
+/**
+ * Print the result of CPS
+ * @param {string} str 
+ */
+ var printOutCPS = (str) => {
   console.log(str);
 }
 
@@ -20,6 +36,7 @@ async function initUsb() {
   device = await navigator.usb.requestDevice({ filters: [{ vendorId: 0x1A86 }] });
   console.log(device.productName);
   await configureCH341(device);
+  
   return true;
 }
 
@@ -51,18 +68,64 @@ async function usb() {
 
 need256bytes = false;
 
+
+function transfertIn(device, length) {
+  device.transferIn(2, length).then(async result => {
+    console.debug(result);
+    // Only because the device can send garbage. We will ignore anything receveid during the configuration
+    if (startListening){
+      // do nothing
+      console.log("Garbage received, heartbeat probably on");
+      heartbeatIsON = true;
+    } else {
+      // Try to determinate why the result reader is null
+      if (!heartbeatIsON && resultReader == null){
+        // It is an heartbeat if the two msb are equal to 10
+        if ((result.data.getUint16() >> 14 & 0b11) == 0b10) {
+          heartbeatIsON = true;
+        }
+      }
+      // default case, if we expect a result from a command and HB is ON
+      if (resultReader != null && !heartbeatIsON){
+        console.debug("Read using command reader");
+        // Read the result with a reader defined in the methods above
+        resultReader(result);
+      // most difficult case, if we expect a result and HB is ON
+      } else if (resultReader != null && heartbeatIsON) {
+        try {
+          console.debug("Try read using command reader");
+          // Try to read the result with a reader defined in the methods above
+          await resultReader(result);
+        } catch(error){
+          console.error("Catch error, read using heartbeat reader");
+          // In case of failure, read with heartbeat reader
+          heartbeatReader(result);
+        }
+      // Simple case, we don't expect a result, but HB is ON
+      } else if (resultReader == null && heartbeatIsON){
+        console.debug("Read using heartbeat reader");
+        // Read with heartbeat reader
+        heartbeatReader(result);
+      // Shoud never happen case, no result expected and HB is OFF
+      } else {
+        console.debug("Read using default reader");
+        // Read with default debuging reader
+        defaultReader(result);
+      }
+      resultReader = null;
+    }
+    // Once the result has been read, start a new listener
+    listenBulkIn();
+  });
+}
+
 function listenBulkIn() {
+  // Some commands needs to wait for precisely 256 bytes
   if (need256bytes){
-    device.transferIn(2, 256).then(result => {
-      resultReader(result);
-      listenBulkIn();
-    });
+    transfertIn(device, 256);
     need256bytes = false;
-  } else {
-    device.transferIn(2, 512).then(result => {
-      resultReader(result);
-      listenBulkIn();
-    });
+  } else { // Defaut case, wait for 512
+    transfertIn(device, 512);
   }
 }
 
@@ -108,8 +171,10 @@ async function configureCH341 (device) {
   await device.selectConfiguration(1);
   await device.claimInterface(device.configuration.interfaces[0].interfaceNumber);
 
+  startListening = true;
   listenBulkIn();
   listenBulkIn();
+  startListening = false;
 
   res = await device.controlTransferOut({
     requestType: 'vendor',
@@ -167,6 +232,9 @@ async function sendCommandParam(device, cmd, param) {
   await sendCommand(device, "GETVOLT");
   return new Promise ((resolve, reject) => {
     resultReader = (result) => {
+      if (result.data.buffer.byteLength != 1) {
+        reject('Invalid GETVOLT response');
+      }
       volt = result.data.getUint8()/10;
       printOut(`volt: ${volt}`);
       resolve(volt);
@@ -208,6 +276,9 @@ async function sendCommandParam(device, cmd, param) {
   await sendCommand(device, "GETCFG");
   return new Promise ((resolve, reject) => {
     resultReader = (result) => {
+      if (result.data.buffer.byteLength != 512) {
+        reject('Invalid GETCFG response');
+      }
       cfg = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
       printOut(`cfg: ${cfg}`);
       resolve();
@@ -302,6 +373,15 @@ async function getGyro(device){
 }
 
 /**
+ * Power ON
+ * @param {*} device 
+ * @returns 
+ */
+ async function powerON(device){
+  await sendCommand(device, "POWERON");
+}
+
+/**
  * Power OFF
  * @param {*} device 
  * @returns 
@@ -311,19 +391,30 @@ async function powerOFF(device){
 }
 
 /**
- * Power ON
- * @param {*} device 
- * @returns 
- */
-async function powerON(device){
-  await sendCommand(device, "POWERON");
-}
-
-/**
  * Reboot unit
  * @param {*} device 
  * @returns 
  */
  async function reboot(device){
   await sendCommand(device, "REBOOT");
+}
+
+/**
+ * Turn on the GQ GMC heartbeat
+ * @param {*} device 
+ * @returns 
+ */
+ async function heartbeat1(device){
+  heartbeatIsON = true;
+  await sendCommand(device, "HEARTBEAT1");
+}
+
+/**
+ * Turn off the GQ GMC heartbeat
+ * @param {*} device 
+ * @returns 
+ */
+ async function heartbeat0(device){
+  heartbeatIsON = false;
+  await sendCommand(device, "HEARTBEAT0");
 }

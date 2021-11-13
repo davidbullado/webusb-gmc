@@ -7,6 +7,8 @@ var RootComponent = {
                 'Power ON': () => powerON(device),
                 'Power OFF': () => powerOFF(device),
                 'Reboot': () => powerOFF(device),
+                'Heartbeat ON': () =>heartbeat1(device),
+                'Heartbeat OFF': () =>heartbeat0(device),
                 'Get Serial': () => getSerial(device),
                 'Get Voltage': () => getVolt(device),
                 'Get Temperature': () => getTemp(device),
@@ -20,6 +22,9 @@ var RootComponent = {
     mounted:function () {
         printOut = (str) => {
             this.$refs.dlg.innerText = str;
+        },
+        printOutCPS = (str) => {
+            this.$refs.cps.innerText = str;
         }
     },
     methods:{

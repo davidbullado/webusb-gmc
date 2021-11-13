@@ -5,6 +5,10 @@ body {
     color: white;
 }
 
+dialog {
+    position:relative;
+}
+
 #canvas {
     margin: 0;
     padding: 0;
