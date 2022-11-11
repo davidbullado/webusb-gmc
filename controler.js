@@ -34,6 +34,9 @@ var RootComponent = {
         sendCommand: function (userCommand) {
             sendCommand(device, userCommand);
         },
+        sendCommandText: function (userCommand) {
+            sendCommandText(device, userCommand);
+        },
         /*startAnimation: function() {
             if (!IS_RUNNING){
                 IS_RUNNING = true;

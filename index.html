@@ -62,6 +62,7 @@
               </ul>
               <input v-model="userCommand"></input>
               <button @click="sendCommand(userCommand)">Send command</button>
+              <button @click="sendCommandText(userCommand)">Send command Text</button>
               <dialog ref="dlg" open>
                 Please start the device
               </dialog>

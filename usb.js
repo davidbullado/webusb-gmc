@@ -1,9 +1,9 @@
 var resultReader = () => {};
 var defaultReader = (result) => {
-  let hex = buf2hex(new Uint8Array(result.data.buffer));
   let size = result.data.buffer.byteLength;
+  let hex = buf2hex(new Uint8Array(result.data.buffer));
   printOut(`Default Reader: hex=${hex}
-Size: ${size}`);
+  Size: ${size}`);
 }
 var heartbeatReader = (result) => {
   cpm = 0x3FFF & result.data.getUint16();
@@ -212,7 +212,7 @@ async function configureCH341 (device) {
   console.debug(res);
 }
 
-const decoder = new TextDecoder();
+const decoder = new TextDecoder('ascii');
 const encoder = new TextEncoder();
 
 async function sendCommand(device, cmd) {
@@ -462,4 +462,22 @@ async function powerOFF(device){
  async function heartbeat0(device){
   heartbeatIsON = false;
   await sendCommand(device, "HEARTBEAT0");
+}
+
+
+/**
+ * Reboot unit
+ * @param {*} device 
+ * @returns 
+ */
+ async function sendCommandText(device, command){
+  await sendCommand(device, command);
+  return new Promise ((resolve, reject) => {
+    resultReader = (result) => {
+      let size = result.data.buffer.byteLength;
+      let text = decoder.decode(result.data.buffer);
+      printOut(`Default Reader: ${text}
+      Size: ${size}`);
+    }
+  });
 }
