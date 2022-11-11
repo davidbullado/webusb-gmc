@@ -60,6 +60,8 @@
                   <button @click="method">{{ name }}</button>
                 </li>
               </ul>
+              <input v-model="userCommand"></input>
+              <button @click="sendCommand(userCommand)">Send command</button>
               <dialog ref="dlg" open>
                 Please start the device
               </dialog>

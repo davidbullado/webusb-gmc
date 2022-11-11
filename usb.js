@@ -1,7 +1,9 @@
 var resultReader = () => {};
 var defaultReader = (result) => {
   let hex = buf2hex(new Uint8Array(result.data.buffer));
-  printOut(`Default Reader: hex=${hex}`);
+  let size = result.data.buffer.byteLength;
+  printOut(`Default Reader: hex=${hex}
+Size: ${size}`);
 }
 var heartbeatReader = (result) => {
   cpm = 0x3FFF & result.data.getUint16();
@@ -69,7 +71,7 @@ async function usb() {
 need256bytes = false;
 
 
-function transfertIn(device, length) {
+function transfertIn_bak(device, length) {
   device.transferIn(2, length).then(async result => {
     console.debug(result);
     // Only because the device can send garbage. We will ignore anything receveid during the configuration
@@ -119,6 +121,29 @@ function transfertIn(device, length) {
   });
 }
 
+
+function transfertIn(device, length) {
+  device.transferIn(2, length).then(async result => {
+    console.debug(result);
+
+    var isHeartbeat = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
+
+    if (isHeartbeat) {
+      heartbeatReader(result);
+    } else if (resultReader != null) {
+      resultReader(result);
+    } else if (!startListening) {
+      console.debug("Read using default reader");
+      // Read with default debuging reader
+      defaultReader(result);
+    }
+    resultReader = null;
+
+    // Once the result has been read, start a new listener
+    listenBulkIn();
+  });
+}
+
 function listenBulkIn() {
   // Some commands needs to wait for precisely 256 bytes
   if (need256bytes){
@@ -128,6 +153,7 @@ function listenBulkIn() {
     transfertIn(device, 512);
   }
 }
+
 
 async function configureCH341 (device) {
   await device.open();
@@ -262,6 +288,25 @@ async function sendCommandParam(device, cmd, param) {
 }
 
 /**
+ * Get version
+ * @param {*} device 
+ * @returns 
+ */
+ async function getVer(device){
+  await sendCommand(device, "GETVER");
+  return new Promise ((resolve, reject) => {
+    resultReader = (result) => {
+      if (result.data.buffer.byteLength != 14) {
+        reject('Invalid GETVER response');
+      }
+      let version = decoder.decode(result.data.buffer);
+      printOut(`Version: ${version}`);
+      resolve();
+    }
+  });
+}
+
+/**
  * Get configuration data
  * @param {*} device 
  * @returns 
@@ -277,7 +322,7 @@ async function sendCommandParam(device, cmd, param) {
   return new Promise ((resolve, reject) => {
     resultReader = (result) => {
       if (result.data.buffer.byteLength != 512) {
-        reject('Invalid GETCFG response');
+        reject('Invalid GETCFG response, byteLength: '+result.data.buffer.byteLength);
       }
       cfg = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
       printOut(`cfg: ${cfg}`);

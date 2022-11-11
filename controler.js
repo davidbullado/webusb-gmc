@@ -3,20 +3,23 @@
 var RootComponent = {
     data() {
         return {
-            methods:{
+            methods: {
                 'Power ON': () => powerON(device),
                 'Power OFF': () => powerOFF(device),
                 'Reboot': () => powerOFF(device),
                 'Heartbeat ON': () =>heartbeat1(device),
                 'Heartbeat OFF': () =>heartbeat0(device),
                 'Get Serial': () => getSerial(device),
+                'Get Version': () => getVer(device),
                 'Get Voltage': () => getVolt(device),
                 'Get Temperature': () => getTemp(device),
+                'Set DateTime': () => setDateTime(device),
                 'Get DateTime': () => getDateTime(device),
                 'getGyro': () => getGyro(device),
                 'getCPM': () => getCPM(device),
                 'getCfg': () => getCfg(device),
             },
+            userCommand: '',
         }
     },
     mounted:function () {
@@ -28,6 +31,9 @@ var RootComponent = {
         }
     },
     methods:{
+        sendCommand: function (userCommand) {
+            sendCommand(device, userCommand);
+        },
         /*startAnimation: function() {
             if (!IS_RUNNING){
                 IS_RUNNING = true;
