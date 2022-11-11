@@ -5,7 +5,7 @@ var defaultReader = (result) => {
   printOut(`Default Reader: hex=${hex}
   Size: ${size}`);
 }
-var heartbeatReader = (result) => {
+var cpsReader = (result) => {
   cpm = 0x3FFF & result.data.getUint16();
   printOutCPS(`CPS: ${cpm}`);
 }
@@ -101,13 +101,13 @@ function transfertIn_bak(device, length) {
         } catch(error){
           console.error("Catch error, read using heartbeat reader");
           // In case of failure, read with heartbeat reader
-          heartbeatReader(result);
+          cpsReader(result);
         }
       // Simple case, we don't expect a result, but HB is ON
       } else if (resultReader == null && heartbeatIsON){
         console.debug("Read using heartbeat reader");
         // Read with heartbeat reader
-        heartbeatReader(result);
+        cpsReader(result);
       // Shoud never happen case, no result expected and HB is OFF
       } else {
         console.debug("Read using default reader");
@@ -126,10 +126,10 @@ function transfertIn(device, length) {
   device.transferIn(2, length).then(async result => {
     console.debug(result);
 
-    var isHeartbeat = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
+    var isCPS = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
 
-    if (isHeartbeat) {
-      heartbeatReader(result);
+    if (isCPS) {
+      cpsReader(result);
     } else if (resultReader != null) {
       resultReader(result);
     } else if (!startListening) {
@@ -244,6 +244,21 @@ async function sendCommandParam(device, cmd, param) {
     resultReader = (result) => {
       cpm = result.data.getUint16();
       printOut(`cpm: ${cpm}`);
+      resolve();
+    }
+  });
+}
+
+/**
+ * Get current CPS value
+ * @param {*} device 
+ * @returns 
+ */
+ async function getCPS(device){
+  await sendCommand(device, "GETCPS");
+  return new Promise ((resolve, reject) => {
+    resultReader = (result) => {
+      cpsReader(result);
       resolve();
     }
   });
@@ -464,6 +479,23 @@ async function powerOFF(device){
   await sendCommand(device, "HEARTBEAT0");
 }
 
+/**
+ * Turn on the speaker
+ * @param {*} device 
+ * @returns 
+ */
+ async function speaker1(device){
+  await sendCommand(device, "SPEAKER1");
+}
+
+/**
+ * Turn off the speaker
+ * @param {*} device 
+ * @returns 
+ */
+ async function speaker0(device){
+  await sendCommand(device, "SPEAKER0");
+}
 
 /**
  * Reboot unit
