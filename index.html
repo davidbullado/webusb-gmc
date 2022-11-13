@@ -61,8 +61,14 @@
                 </li>
               </ul>
               <input v-model="userCommand"></input>
+              <input v-model="userParam"></input>
               <button @click="sendCommand(userCommand)">Send command</button>
               <button @click="sendCommandText(userCommand)">Send command Text</button>
+              <button @click="sendCommandParam(userCommand, userParam)">Send command Param</button>
+              <br/>
+              <input v-model="spirAddr" type="number" min="0" max="16777214"></input>
+              <input v-model="spirLength" type="number" min="1" max="4096"></input>
+              <button @click="spir(spirAddr, spirLength)">Send command Param</button>
               <dialog ref="dlg" open>
                 Please start the device
               </dialog>

@@ -121,13 +121,38 @@ function transfertIn_bak(device, length) {
   });
 }
 
+/*
+function transfertIn(device, length) {
+  device.transferIn(2, length).then(async result => {
+    console.debug(result);
+
+    var isCPS = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
+
+    if (isCPS) {
+      cpsReader(result);
+    } else if (resultReader != null) {
+      resultReader(result);
+    } else if (!startListening) {
+      console.debug("Read using default reader");
+      // Read with default debuging reader
+      defaultReader(result);
+    }
+    resultReader = null;
+
+    // Once the result has been read, start a new listener
+    listenBulkIn();
+  });
+}*/
+
 function transfertIn() {
   // Some commands needs to wait for precisely 256 bytes
   if (need256bytes > 0){
     length = need256bytes;
+    //transfertIn(device, 256);
     need256bytes = 0;
   } else { // Defaut case, wait for 512
     length = 512;
+    //transfertIn(device, 512);
   }
   device.transferIn(2, length).then(async result => {
     console.debug(result);
@@ -149,6 +174,7 @@ function transfertIn() {
     transfertIn();
   });
 }
+
 
 async function configureCH341 (device) {
   await device.open();
@@ -210,17 +236,41 @@ async function configureCH341 (device) {
 const decoder = new TextDecoder('ascii');
 const encoder = new TextEncoder();
 
+/**
+ * Get year date and time
+ * @param {*} device 
+ * @returns 
+ */
+ async function dummyCommand(device){
+  cmd = "GETDATETIME";
+  console.debug(`send command ${cmd}`);
+  const data = encoder.encode(`<${cmd}>>`);
+  res = await device.transferOut(2,data);
+  console.debug(`send response: ${res}`);
+
+  return new Promise ((resolve, reject) => {
+    resultReader = (result) => {
+      [yy, mm, dd, hh, mi, ss, check] = new Uint8Array(result.data.buffer);
+      if (check !== 0xaa) {
+        reject('Invalid DUMMY response');
+      }
+      printOut(`Dummy time: ${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`);
+      resolve();
+    }
+  });
+}
+
 async function requestNBytes(bytes) {
-    // Request a 256 bytes length response
-    need256bytes = bytes;
-    // Call two dummy commands
-    await dummyCommand(device);
-    await dummyCommand(device);
+  // Request a x bytes length response
+  need256bytes = bytes;
+  // Call two dummy commands
+  await dummyCommand(device);
+  await dummyCommand(device);
 }
 
 async function sendCommand(device, cmd, size=512) {
-  if (size != 512){
-    await requestNBytes(size);
+  if (size != 512) {
+    requestNBytes(size);
   }
   console.debug(`send command ${cmd}`);
   const data = encoder.encode(`<${cmd}>>`);
@@ -229,42 +279,18 @@ async function sendCommand(device, cmd, size=512) {
 }
 
 async function sendCommandParam(device, cmd, param, size=512) {
-  if (size != 512){
-    await requestNBytes(size);
+  if (size != 512) {
+    requestNBytes(size);
   }
   console.debug(`send command ${cmd}`);
   const dataStart = encoder.encode(`<${cmd}`);
   const dataParam = new Uint8Array(param);
-  console.debug(`send params: ${dataParam}`);
   const dataEnd = encoder.encode(`>>`);
   const data = new Uint8Array([ ...dataStart, ...dataParam, ...dataEnd ]);
   res = await device.transferOut(2,data);
   console.debug(`send response: ${res}`);
 }
 
-/**
- * Get year date and time
- * @param {*} device 
- * @returns 
- */
- async function dummyCommand(device){
-  cmd = "GETDATETIME";
-  console.debug(`send dummy command ${cmd}`);
-  const data = encoder.encode(`<${cmd}>>`);
-  res = await device.transferOut(2,data);
-  console.debug(`send dummy response: ${res}`);
-
-  return new Promise ((resolve, reject) => {
-    resultReader = (result) => {
-      [yy, mm, dd, hh, mi, ss, check] = new Uint8Array(result.data.buffer);
-      if (check !== 0xaa) {
-        reject('Invalid DUMMY response');
-      }
-      console.log(`Dummy time: ${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`);
-      resolve();
-    }
-  });
-}
 
 /**
  * Get current CPM value
@@ -354,14 +380,12 @@ async function sendCommandParam(device, cmd, param, size=512) {
   });
 }
 
-
 /**
  * Get configuration data
  * @param {*} device 
  * @returns 
  */
  async function getCfg(device){
-
   // Send the query
   await sendCommand(device, "GETCFG", 256);
   return new Promise ((resolve, reject) => {
@@ -566,11 +590,11 @@ async function powerOFF(device){
   const dl = new DataView(new ArrayBuffer(2)); // 16 bits
 
   addr.setUint32(0, address);
-  dl.setUint16(0, dataLength-1);
+  dl.setUint16(0, dataLength);
 
   const data = [...new Uint8Array(addr.buffer.slice(1)), ...new Uint8Array(dl.buffer)];
 
-  await sendCommandParam(device, "SPIR", data, dataLength);
+  await sendCommandParam(device, "SPIR", data, dataLength+1);
 }
 
 // SPIR[A2][A1][A0][L1][L0]

@@ -23,6 +23,8 @@ var RootComponent = {
                 'Speaker OFF': () => speaker0(device),
             },
             userCommand: '',
+            spirLength: 1,
+            spirAddr: 0,
         }
     },
     mounted:function () {
@@ -39,6 +41,13 @@ var RootComponent = {
         },
         sendCommandText: function (userCommand) {
             sendCommandText(device, userCommand);
+        },
+        sendCommandParam: function (userCommand, userParam) {
+            p = JSON.parse('['+userParam+']');
+            sendCommandParam(device, userCommand, p);
+        },
+        spir: function (address, dataLength) {
+            spir(device, address, dataLength);
         },
         /*startAnimation: function() {
             if (!IS_RUNNING){
