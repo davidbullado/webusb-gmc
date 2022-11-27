@@ -549,10 +549,10 @@ async function powerOFF(device){
  * Send command with data as Uint8Array
  * @param {*} device 
  * @returns 
- */
+
  async function sendCommandText(device, command, data){
   await sendCommandParam(device, command, data);
-}
+}*/
 
 
 /**
@@ -571,20 +571,255 @@ async function powerOFF(device){
   const data = [...new Uint8Array(addr.buffer.slice(1)), ...new Uint8Array(dl.buffer)];
 
   await sendCommandParam(device, "SPIR", data, dataLength);
+  
+  return new Promise ((resolve, reject) => {
+    resultReader = (result) => {
+      if (result.data.buffer.byteLength != dataLength) {
+        reject('Invalid SPIR response, byteLength: '+result.data.buffer.byteLength);
+      }
+      r = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
+      printOut(`spir: ${r}`);
+      resolve(new Uint8Array(result.data.buffer));
+    }
+  });
 }
 
-// SPIR[A2][A1][A0][L1][L0]
-// SPIR00010
-// A2,A1,A0 are three bytes address data
-// The L1,L0 are the data length requested.  L1 is high byte of 16 bit integer and L0 is low byte.
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function spir_all(device) {
+  let address = 0;
+  const m = new Uint8Array(65536);
+  for(i=0; i<105; i++) {
+    r = await spir(device, address, 512);
+    await sleep(100);
+    m.set(r, address);
+    address += 512;
+  }
+  return m;
+}
 
 
-// SPIR 0,0,4,0,0 => 01
-// SPIR 0,0,12,0,0 => 02
-// SPIR 0,0,17,0,0 => 01
-// SPIR 0,0,22,0,0 => 02
-// SPIR 0,0,18,0,4 => 0000000002
-// SPIR 0,0,0,1,255 => 0000000001
+function findDataTrames(buffer) {
+  const d = new DataView(buffer);
+  const l = d.byteLength - 10;
+  const pos = [];
+  for (let i=0; i < l; i+=2){
+    let r = d.getUint16(i) ^ 0x55AA || d.getUint8(i+2) ^ 0x00 || d.getUint8(i+9) ^ 0x55 || d.getUint16(i+10) ^ 0xAA01;
+    if (!r) {
+      pos.push(i);
+      //readTimestampFromMemory(buffer, i);
+    }
+  }
+  return pos;
+}
 
-// n * 3 -1
-// 
+const decodeFreq = {0:'off', 1:'cps', 2:'cpm', 3:'cpm/h'};
+const decodeFreqDelta = {0:0, 1:1000, 2:1000*60, 3:1000*60*60};
+
+function readTimestampFromMemory(buffer, pos) {
+  // 55AA 00YY MMDD HHMM SS55 AADD
+  const d = new DataView(buffer, pos, 12);
+  let year = 2000 + d.getUint8(3);
+  let month = d.getUint8(4) - 1;
+  let day = d.getUint8(5);
+  let hour = d.getUint8(6);
+  let min = d.getUint8(7);
+  let sec = d.getUint8(8);
+  let freq = d.getUint8(11);
+  dt = new Date(year, month, day, hour, min, sec);
+
+  //console.log(pos, pos.toString(16), decodeFreq[freq], dt);
+  return [dt, freq, 12];
+}
+
+
+function findAscii(d) {
+  let start = 0;
+  let end = 0 + d.byteLength;
+  let strings = [];
+  let currentTime = new Date();
+  let incrementTime = 0;
+  for (let i=start; i < end; i++){
+    console.log("Current pos: "+i)
+    let tagStart = !(d.getUint8(i) ^ 0x55 || d.getUint8(i+1) ^ 0xAA );
+    if (tagStart){
+      let tagType = d.getUint8(i+2);
+      switch (tagType) {
+        case 0x00:
+          console.log("found timestamp");
+          let [t, freq, jmp2] = readTimestampFromMemory(d.buffer, d.byteOffset+i);
+          currentTime = t;
+          incrementTime = decodeFreqDelta[freq];
+          console.log(t);
+          console.log(decodeFreq[freq]);
+          i += jmp2-1;
+          break;
+        case 0x01:
+          console.log("found 01");
+          let twobyte = d.getUint16(i+3);
+          console.log("twobyte: "+twobyte);
+          i+= 4;
+          break;
+        case 0x02:
+          let [txt, jmp] = readAscii(d, i);
+          strings.push(txt);
+          console.log("found "+txt);
+          console.log("from "+i+" jump "+jmp);
+          i += jmp-1;
+          break;
+        default:
+          console.log("other: "+tagType);
+      }
+    } else {
+      currentTime = new Date(currentTime.getTime() + incrementTime);
+      console.log("value: "+d.getUint8(i), currentTime);
+    }
+  }
+  return strings;
+}
+
+function readAscii(d, pos) {
+  let absolutepos = d.byteOffset+pos;
+  let length = d.getUint8(pos+3);
+  let startpos = absolutepos+4;
+  let end = startpos+length;
+  let buf = d.buffer.slice(startpos,end);
+  let txt = decoder.decode( buf ); 
+  return [txt, end-absolutepos];
+}
+
+
+function readMemory() {
+
+  fetch('/memory_dump.bin')
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`HTTP error, status = ${response.status}`);
+      }
+      return response.arrayBuffer();
+    })
+    .then((buffer) => {
+      const tramesPos = findDataTrames(buffer);
+      let dataTrames = detectSessions(tramesPos, buffer);
+      for (t of dataTrames) {
+        blocks(t.pos, buffer)
+        console.log(t);
+      }
+      console.log("ok");
+    });
+}
+
+
+function detectSessions(data, buffer) {
+  // Given this context
+  initCtx = (ctx) => {
+    ctx.dataTrames = [];
+    ctx.curTrame = null;
+  };
+  // Do those operations
+  operations = (ctx, x) => {
+    y = {};
+    [y.t, y.freq] = readTimestampFromMemory(buffer, x);
+    y.pos = x;
+    return y;
+  };
+  // If a new group is detected
+  isnew = (ctx, yCur, yPrev) => {
+    const delta = yCur.t - yPrev.t;
+    return delta > 181000 || delta < 0;
+  }
+  // Initiate a new group
+  firstElementCallback = (ctx, y) => {
+    ctx.curTrame = {};
+    ctx.curTrame.pos = [];
+    ctx.curTrame.start = y;
+  };
+  // For each element
+  eachElementCallback = function (ctx, y) {
+    ctx.curTrame.pos.push(y);
+  };
+  // Close the previous group
+  lastElementCallback = function (ctx, y) {
+    ctx.curTrame.end = y;
+    //ctx.curTrame.buf = new DataView(buffer, ctx.curTrame.start.pos, y.pos-ctx.curTrame.start.pos);
+    ctx.dataTrames.push(ctx.curTrame);
+  };
+  // Finalize the results 
+  closeCtx = (ctx) => {
+    return ctx.dataTrames;
+  };
+  
+  return forGroups(data, initCtx, operations, isnew, eachElementCallback, firstElementCallback, lastElementCallback, closeCtx);
+}
+
+function blocks(positions, buffer) {
+  // Given this context
+  initCtx = (ctx) => {
+  };
+  // Do those operations
+  operations = (ctx, x) => {
+    return x;
+  };
+  // Compare previous and current record
+  compare = (ctx, yCur, yPrev) => {
+    let blockLength = yCur.pos - yPrev.pos;
+    let d = new DataView(buffer, yPrev.pos, blockLength);
+    let block = {};
+    try {
+      yPrev.ascii  = findAscii(d);
+    } catch (e) {
+
+    }
+    yPrev.blockLength = blockLength;
+    
+    return false;
+  };
+  // Finalize the results 
+  closeCtx = (ctx) => {
+  };
+
+  forByTwoElements(positions, initCtx, operations, compare, closeCtx);
+}
+
+
+
+function forGroups(data, initCtx, operations, isnew, eachElementCallback, firstElementCallback, lastElementCallback, closeCtx) {
+  const ctx = {}; initCtx(ctx);
+  let current = operations(ctx, data[0]);
+  let previous = current;
+  firstElementCallback(ctx,current);
+  eachElementCallback(ctx, current);
+  for (x of data.slice(1)){
+    current = operations(ctx, x);
+    if (isnew(ctx, current, previous)){
+      lastElementCallback(ctx, previous)
+      firstElementCallback(ctx, current);
+    }
+    eachElementCallback(ctx, current);
+    previous = current;
+  }
+  lastElementCallback(ctx,current);
+  return closeCtx(ctx);
+}
+
+function forByTwoElements (data, initCtx, operations, compare, closeCtx) {
+  const ctx = {}; initCtx(ctx);
+  let current = operations(ctx, data[0]);
+  let previous = current;
+  for (x of data.slice(1)){
+    current = operations(ctx, x);
+    compare(ctx, current, previous);
+    previous = current;
+  }
+  return closeCtx(ctx);
+}
+
+
+
+// IdÃ©e : charger par exemple 1000 byte. Lire les premiers blocks, dÃ©terminer la length L.
+// Ensuite faire des sauts de L bytes, vÃ©rifier si on est sur des bons block.
+// Si non, recommencer l'algo Ã  partir de la derniÃ¨re position vÃ©rifiÃ©e.
+// Obtient une liste de positions.

@@ -21,10 +21,12 @@ var RootComponent = {
                 'Get Config': () => getCfg(device),
                 'Speaker ON': () => speaker1(device),
                 'Speaker OFF': () => speaker0(device),
+                'ReadMemory': () =>readMemory(),
             },
             userCommand: '',
-            spirLength: 1,
+            spirLength: 512,
             spirAddr: 0,
+            errorMessage: '',
         }
     },
     mounted:function () {
@@ -49,6 +51,30 @@ var RootComponent = {
         spir: function (address, dataLength) {
             spir(device, address, dataLength);
         },
+        spir_all_vue: async function () {
+            res = await spir_all(device);
+            this.downloadFile(res);
+        },
+        downloadFile: function (bits) {
+            const file = new Blob([bits], {type: 'application/octet-stream'});
+            // Create a link and set the URL using `createObjectURL`
+            const link = document.createElement("a");
+            link.style.display = "none";
+            link.href = URL.createObjectURL(file);
+            link.download = file.name;
+            
+            // It needs to be added to the DOM so it can be clicked
+            document.body.appendChild(link);
+            link.click();
+        },
+        initGmc: async function () {
+            try {
+                this.errorMessage = '';
+                await initUsb()
+            } catch (error) {
+                this.errorMessage = error;
+            }
+        }
         /*startAnimation: function() {
             if (!IS_RUNNING){
                 IS_RUNNING = true;

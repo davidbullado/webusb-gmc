@@ -11,73 +11,78 @@
     </head>
     <body>
         
-        <div class="container">
-            <!-- Sidebar -->
-            <aside id="sidebar" class="container__sidebar">
-                <div class="accordion" id="accordionExample">
-                    <div class="accordion-item">
-                      <h2 class="accordion-header" id="headingOne">
-                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
-                          Main
-                        </button>
-                      </h2>
-                      <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
-                        <div class="accordion-body">
-                        </div>
-                      </div>
-                    </div>
-                    <div class="accordion-item">
-                      <h2 class="accordion-header" id="headingTwo">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
-                          Parameters
-                        </button>
-                      </h2>
-                      <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
-                        <div class="accordion-body">
-                        </div>
-                      </div>
-                    </div>
-                    <div class="accordion-item">
-                      <h2 class="accordion-header" id="headingThree">
-                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
-                          Stats
-                        </button>
-                      </h2>
-                      <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordionExample">
-                        <div class="accordion-body">
-                        </div>
-                      </div>
+      <div class="container">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="container__sidebar">
+            <div class="accordion" id="accordionExample">
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="headingOne">
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                      Main
+                    </button>
+                  </h2>
+                  <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+                    <div class="accordion-body">
                     </div>
                   </div>
-            </aside>
-        
-            <!-- Main -->
-            <main id="main" class="container__main">
-              <button onclick="initUsb()">Open device</button>
-              <button onclick="device.close()">Close device</button>
-              <ul id="array-rendering">
-                <li v-for="(method,name) in methods">
-                  <button @click="method">{{ name }}</button>
-                </li>
-              </ul>
-              <input v-model="userCommand"></input>
-              <input v-model="userParam"></input>
-              <button @click="sendCommand(userCommand)">Send command</button>
-              <button @click="sendCommandText(userCommand)">Send command Text</button>
-              <button @click="sendCommandParam(userCommand, userParam)">Send command Param</button>
-              <br/>
-              <input v-model="spirAddr" type="number" min="0" max="16777214"></input>
-              <input v-model="spirLength" type="number" min="1" max="4096"></input>
-              <button @click="spir(spirAddr, spirLength)">Send command Param</button>
-              <dialog ref="dlg" open>
-                Please start the device
-              </dialog>
-              <p>
-              <dialog ref="cps" open>
-                No Data to show
-              </dialog>
-              </p>
-            </main>
-        </div>
+                </div>
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="headingTwo">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                      Parameters
+                    </button>
+                  </h2>
+                  <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
+                    <div class="accordion-body">
+                    </div>
+                  </div>
+                </div>
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="headingThree">
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                      Stats
+                    </button>
+                  </h2>
+                  <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordionExample">
+                    <div class="accordion-body">
+                    </div>
+                  </div>
+                </div>
+              </div>
+        </aside>
+    
+        <!-- Main -->
+        <main id="main" class="container__main">
+          <button @click="initGmc()" >Open device</button>
+          <button onclick="device.close()">Close device</button>
+          <label class="is-invalid">{{ errorMessage }}</label>
+          <label id="errBind">Try to do: sudo sh -c 'echo -n "1-1:1.0" > /sys/bus/usb/drivers/ch341/unbind'</label>
+          <ul id="array-rendering">
+            <li v-for="(method,name) in methods">
+              <button @click="method">{{ name }}</button>
+            </li>
+            <li>
+              <button @click="spir_all_vue()">Spir All Memory</button>
+            </li>
+          </ul>
+          <input v-model="userCommand"></input>
+          <input v-model="userParam"></input>
+          <button @click="sendCommand(userCommand)">Send command</button>
+          <button @click="sendCommandText(userCommand)">Send command Text</button>
+          <button @click="sendCommandParam(userCommand, userParam)">Send command Param</button>
+          <br/>
+          <input v-model="spirAddr" type="number" min="0" max="16777214"></input>
+          <input v-model="spirLength" type="number" min="1" max="4096"></input>
+          <button @click="spir(spirAddr, spirLength)">Send command Param</button>
+          <dialog ref="dlg" open>
+            Please start the device
+          </dialog>
+          <p>
+          <dialog ref="cps" open>
+            No Data to show
+          </dialog>
+          </p>
+        </main>
+    </div>
     </body>
 </html>
