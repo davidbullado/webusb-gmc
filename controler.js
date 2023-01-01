@@ -36,6 +36,8 @@ var RootComponent = {
         printOutCPS = (str) => {
             this.$refs.cps.innerText = str;
         }
+        google.charts.load('current', {packages: ['corechart', 'line']});
+        //google.charts.setOnLoadCallback(this.showGraphGoogle);
     },
     methods:{
         sendCommand: function (userCommand) {
@@ -74,6 +76,77 @@ var RootComponent = {
             } catch (error) {
                 this.errorMessage = error;
             }
+        },
+        showGraph: async function () {
+            data = await readMemory();
+            const nth = 30;
+            const cpsValues = data.measurements.slice(0,nth);
+            const timestamps = data.timestamps.slice(0,nth);
+            const ctx = document.getElementById('canvas-cps').getContext('2d');
+            const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timestamps,
+                datasets: [{
+                    label: 'Radioactivity (CPS)',
+                    data: cpsValues,
+                    fill: false,
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                scales: {
+                    xAxes: [{
+                        ticks: {
+                            maxTicksLimit: 10
+                        }
+                        }],
+                    yAxes: [{
+                        ticks: {
+                        beginAtZero: true
+                        }
+                    }]
+                }
+            }
+            });
+        },
+        showGraphGoogle: async function () {
+            var data = new google.visualization.DataTable();
+            data.addColumn('date', 'X');
+            data.addColumn('number', 'Radioactivity (CPS)');
+
+            dataMems = await readMemory();
+            dataMem = dataMems[0];
+
+            const cpsValues = dataMem.measurements;
+            const timestamps = dataMem.timestamps;
+
+            const merged = timestamps.map((x, i) => [x, cpsValues[i]]);
+            const aggregatedData = {};
+
+            merged.forEach(datum => {
+              const minuteTimestamp = Math.floor(datum[0].getTime() / 60000) * 60000;
+              if (!aggregatedData[minuteTimestamp]) {
+                aggregatedData[minuteTimestamp] = 0;
+              }
+              aggregatedData[minuteTimestamp] += datum[1];
+            });
+            res = Object.entries(aggregatedData).map(([key, value]) => [new Date(Number(key)), value]);
+
+            data.addRows(res);
+            var options = {
+              hAxis: {
+                title: 'Time'
+              },
+              vAxis: {
+                title: 'Radioactivity'
+              },
+              colors: ['#a52714'],
+            };
+      
+            var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+            chart.draw(data, options);
         }
         /*startAnimation: function() {
             if (!IS_RUNNING){

@@ -642,6 +642,10 @@ function findAscii(d) {
   let strings = [];
   let currentTime = new Date();
   let incrementTime = 0;
+  let unit = '';
+  let measurements = [];
+  let timestamps = [];
+  let units = [];
   for (let i=start; i < end; i++){
     console.log("Current pos: "+i)
     let tagStart = !(d.getUint8(i) ^ 0x55 || d.getUint8(i+1) ^ 0xAA );
@@ -653,8 +657,9 @@ function findAscii(d) {
           let [t, freq, jmp2] = readTimestampFromMemory(d.buffer, d.byteOffset+i);
           currentTime = t;
           incrementTime = decodeFreqDelta[freq];
+          unit = decodeFreq[freq];
           console.log(t);
-          console.log(decodeFreq[freq]);
+          console.log(unit);
           i += jmp2-1;
           break;
         case 0x01:
@@ -675,10 +680,14 @@ function findAscii(d) {
       }
     } else {
       currentTime = new Date(currentTime.getTime() + incrementTime);
+      let value = d.getUint8(i);
       console.log("value: "+d.getUint8(i), currentTime);
+      measurements.push(value);
+      timestamps.push(currentTime);
+      units.push(unit);
     }
   }
-  return strings;
+  return {strings, measurements, timestamps, units};
 }
 
 function readAscii(d, pos) {
@@ -692,9 +701,9 @@ function readAscii(d, pos) {
 }
 
 
-function readMemory() {
+async function readMemory() {
 
-  fetch('/memory_dump.bin')
+  return fetch('/memory_dump.bin')
     .then((response) => {
       if (!response.ok) {
         throw new Error(`HTTP error, status = ${response.status}`);
@@ -704,11 +713,11 @@ function readMemory() {
     .then((buffer) => {
       const tramesPos = findDataTrames(buffer);
       let dataTrames = detectSessions(tramesPos, buffer);
+      return dataTrames.map(t => blocks(t.pos, buffer));
       for (t of dataTrames) {
-        blocks(t.pos, buffer)
-        console.log(t);
+         return blocks(t.pos, buffer)
       }
-      console.log("ok");
+      //return dataTrames;
     });
 }
 
@@ -758,6 +767,7 @@ function detectSessions(data, buffer) {
 function blocks(positions, buffer) {
   // Given this context
   initCtx = (ctx) => {
+    ctx.agg = {ascii:null, measurements: [], timestamps: [], units: []};
   };
   // Do those operations
   operations = (ctx, x) => {
@@ -769,7 +779,11 @@ function blocks(positions, buffer) {
     let d = new DataView(buffer, yPrev.pos, blockLength);
     let block = {};
     try {
-      yPrev.ascii  = findAscii(d);
+      ({ascii, measurements, timestamps, units}  = findAscii(d));
+      ctx.agg.ascii = ascii;
+      ctx.agg.measurements.push(...measurements);
+      ctx.agg.timestamps.push(...timestamps);
+      ctx.agg.units.push(...units);
     } catch (e) {
 
     }
@@ -779,9 +793,10 @@ function blocks(positions, buffer) {
   };
   // Finalize the results 
   closeCtx = (ctx) => {
+    return ctx.agg;
   };
 
-  forByTwoElements(positions, initCtx, operations, compare, closeCtx);
+  return forByTwoElements(positions, initCtx, operations, compare, closeCtx);
 }
 
 
