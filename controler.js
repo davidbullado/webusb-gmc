@@ -4,24 +4,24 @@ var RootComponent = {
     data() {
         return {
             methods: {
-                'Power ON': () => powerON(device),
-                'Power OFF': () => powerOFF(device),
-                'Reboot': () => powerOFF(device),
-                'Heartbeat ON': () =>heartbeat1(device),
-                'Heartbeat OFF': () =>heartbeat0(device),
-                'Get Serial': () => getSerial(device),
-                'Get Version': () => getVer(device),
-                'Get Voltage': () => getVolt(device),
-                'Get Temperature': () => getTemp(device),
-                'Set DateTime': () => setDateTime(device),
-                'Get DateTime': () => getDateTime(device),
-                'Get Gyro': () => getGyro(device),
-                'Get CPM': () => getCPM(device),
-                'Get CPS': () => getCPS(device),
-                'Get Config': () => getCfg(device),
-                'Speaker ON': () => speaker1(device),
-                'Speaker OFF': () => speaker0(device),
-                'ReadMemory': () =>readMemory(),
+                'Power ON': () => usbLib.powerON(),
+                'Power OFF': () => usbLib.powerOFF(),
+                'Reboot': () => usbLib.powerOFF(),
+                'Heartbeat ON': () => usbLib.heartbeat1(),
+                'Heartbeat OFF': () => usbLib.heartbeat0(),
+                'Get Serial': () => usbLib.getSerial(),
+                'Get Version': () => usbLib.getVer(),
+                'Get Voltage': () => usbLib.getVolt(),
+                'Get Temperature': () => usbLib.getTemp(),
+                'Set DateTime': () => usbLib.setDateTime(),
+                'Get DateTime': () => usbLib.getDateTime(),
+                'Get Gyro': () => usbLib.getGyro(),
+                'Get CPM': () => usbLib.getCPM(),
+                'Get CPS': () => usbLib.getCPS(),
+                'Get Config': () => usbLib.getCfg(),
+                'Speaker ON': () => usbLib.speaker1(),
+                'Speaker OFF': () => usbLib.speaker0(),
+                'ReadMemory': () => usbLib.readMemory(),
             },
             userCommand: '',
             spirLength: 512,
@@ -30,10 +30,10 @@ var RootComponent = {
         }
     },
     mounted:function () {
-        printOut = (str) => {
+        usbLib.printOut = (str) => {
             this.$refs.dlg.innerText = str;
         },
-        printOutCPS = (str) => {
+            usbLib.printOutCPS = (str) => {
             this.$refs.cps.innerText = str;
         }
         google.charts.load('current', {packages: ['corechart', 'line']});
@@ -41,20 +41,20 @@ var RootComponent = {
     },
     methods:{
         sendCommand: function (userCommand) {
-            sendCommand(device, userCommand);
+            usbLib.sendCommand(userCommand);
         },
         sendCommandText: function (userCommand) {
-            sendCommandText(device, userCommand);
+            usbLib.sendCommandText( userCommand);
         },
         sendCommandParam: function (userCommand, userParam) {
             p = JSON.parse('['+userParam+']');
-            sendCommandParam(device, userCommand, p);
+            usbLib.sendCommandParam( userCommand, p);
         },
         spir: function (address, dataLength) {
-            spir(device, address, dataLength);
+            usbLib.spir( address, dataLength);
         },
         spir_all_vue: async function () {
-            res = await spir_all(device);
+            res = await usbLib.spir_all();
             this.downloadFile(res);
         },
         downloadFile: function (bits) {
@@ -72,13 +72,13 @@ var RootComponent = {
         initGmc: async function () {
             try {
                 this.errorMessage = '';
-                await initUsb()
+                await usbLib.initUsb()
             } catch (error) {
                 this.errorMessage = error;
             }
         },
         showGraph: async function () {
-            data = await readMemory();
+            data = await usbLib.readMemory();
             const nth = 30;
             const cpsValues = data.measurements.slice(0,nth);
             const timestamps = data.timestamps.slice(0,nth);
@@ -116,7 +116,7 @@ var RootComponent = {
             data.addColumn('date', 'X');
             data.addColumn('number', 'Radioactivity (CPS)');
 
-            dataMems = await readMemory();
+            dataMems = await usbLib.readMemory();
             dataMem = dataMems[0];
 
             const cpsValues = dataMem.measurements;
