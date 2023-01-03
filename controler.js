@@ -19,6 +19,7 @@ var RootComponent = {
                 'Get CPM': () => usbLib.getCPM(),
                 'Get CPS': () => usbLib.getCPS(),
                 'Get Config': () => usbLib.getCfg(),
+                'Get Config Object': () => usbLib.getConfigObject(),
                 'Speaker ON': () => usbLib.speaker1(),
                 'Speaker OFF': () => usbLib.speaker0(),
                 'ReadMemory': () => usbLib.readMemory(),

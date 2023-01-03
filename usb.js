@@ -1,22 +1,22 @@
 const usbLib = {
     device: undefined /* as USBDevice */,
-    resultReader: () => {
+    resultReader: async () => {
     },
-    defaultReader: (result) => {
+    defaultReader: async (result) => {
         let size = result.data.buffer.byteLength;
         let hex = usbLib.buf2hex(new Uint8Array(result.data.buffer));
-        usbLib.printOut(`Default Reader: hex=${hex}
+        await usbLib.printOut(`Default Reader: hex=${hex}
     Size: ${size}`);
     },
-    cpsReader: (result) => {
+    cpsReader: async (result) => {
         const cpm = 0x3FFF & result.data.getUint16();
-        usbLib.printOutCPS(cpm);
+        await usbLib.printOutCPS(cpm);
     },
     heartbeatIsON: false,
-    printOut: (str) => {
+    printOut: async (str) => {
         console.log(str);
     },
-    printOutCPS: (str) => {
+    printOutCPS: async (str) => {
         console.log(str);
     },
     buf2hex: (buffer) => {
@@ -57,7 +57,7 @@ const usbLib = {
         }
     },
     need256bytes: 0,
-    transfertIn: function () {
+    transfertIn: async function () {
         // Defaut case, wait for 512
         let length = 512;
         // Some commands needs to wait for precisely 256 bytes
@@ -65,26 +65,22 @@ const usbLib = {
             length = this.need256bytes;
             this.need256bytes = 0;
         }
+        const result = await this.device.transferIn(2, length);
+        //console.debug(result);
+        // As soon as the result has been read, start a new listener
+        this.transfertIn();
 
-        this.device.transferIn(2, length).then(async result => {
-            console.debug(result);
-
-            const isCPS = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
-
-            if (isCPS) {
-                usbLib.cpsReader(result);
-            } else if (usbLib.resultReader != null) {
-                usbLib.resultReader(result);
-            } else if (!usbLib.startListening) {
-                console.debug("Read using default reader");
-                // Read with default debuging reader
-                usbLib.defaultReader(result);
-            }
-            usbLib.resultReader = null;
-
-            // Once the result has been read, start a new listener
-            usbLib.transfertIn();
-        });
+        const isCPS = result.data.byteLength === 2 && (result.data.getUint8(0) & 0b1100_0000) === 0b1000_0000;
+        if (isCPS) {
+            await this.cpsReader(result);
+        } else if (usbLib.resultReader != null) {
+            await this.resultReader(result);
+        } else if (!usbLib.startListening) {
+            console.debug("Read using default reader");
+            // Read with default debuging reader
+            await this.defaultReader(result);
+        }
+        this.resultReader = null;
     },
     configureCH341: async function () {
         await this.device.open();
@@ -155,23 +151,23 @@ const usbLib = {
         if (size != 512) {
             await this.requestNBytes(size);
         }
-        console.debug(`send command ${cmd}`);
+        //console.debug(`send command ${cmd}`);
         const data = this.encoder.encode(`<${cmd}>>`);
         const res = await this.device.transferOut(2, data);
-        console.debug(`send response: ${res}`);
+        //console.debug(`send response: ${res}`);
     },
     sendCommandParam: async function (cmd, param, size = 512) {
         if (size != 512) {
             await this.requestNBytes(size);
         }
-        console.debug(`send command ${cmd}`);
+        //console.debug(`send command ${cmd}`);
         const dataStart = this.encoder.encode(`<${cmd}`);
         const dataParam = new Uint8Array(param);
-        console.debug(`send params: ${dataParam}`);
+        //console.debug(`send params: ${dataParam}`);
         const dataEnd = this.encoder.encode(`>>`);
         const data = new Uint8Array([...dataStart, ...dataParam, ...dataEnd]);
         const res = await this.device.transferOut(2, data);
-        console.debug(`send response: ${res}`);
+        //console.debug(`send response: ${res}`);
     },
     /**
      * Get year date and time
@@ -220,8 +216,8 @@ const usbLib = {
     getCPS: async function () {
         await this.sendCommand("GETCPS");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
-                this.cpsReader(result);
+            usbLib.resultReader = async (result) => {
+                await this.cpsReader(result);
                 resolve();
             }
         });
@@ -234,13 +230,14 @@ const usbLib = {
     getVolt: async function () {
         await this.sendCommand("GETVOLT");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 if (result.data.buffer.byteLength != 1) {
                     reject('Invalid GETVOLT response');
+                } else {
+                    const volt = result.data.getUint8() / 10;
+                    await usbLib.printOut(`volt: ${volt}`);
+                    resolve(volt);
                 }
-                const volt = result.data.getUint8() / 10;
-                usbLib.printOut(`volt: ${volt}`);
-                resolve(volt);
             }
         });
     },
@@ -252,13 +249,14 @@ const usbLib = {
     getSerial: async function () {
         await this.sendCommand("GETSERIAL");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 if (result.data.buffer.byteLength !== 7) {
                     reject('Invalid GETSERIAL response');
+                } else {
+                    let serial = this.buf2hex(new Uint8Array(result.data.buffer));
+                    await usbLib.printOut(`Serial: ${serial}`);
+                    resolve(serial);
                 }
-                let serial = this.buf2hex(new Uint8Array(result.data.buffer));
-                usbLib.printOut(`Serial: ${serial}`);
-                resolve(serial);
             }
         });
     },
@@ -270,13 +268,14 @@ const usbLib = {
     getVer: async function () {
         await this.sendCommand("GETVER");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 if (result.data.buffer.byteLength !== 14) {
                     reject('Invalid GETVER response');
+                } else {
+                    let version = this.decoder.decode(result.data.buffer);
+                    await usbLib.printOut(`Version: ${version}`);
+                    resolve(version);
                 }
-                let version = this.decoder.decode(result.data.buffer);
-                usbLib.printOut(`Version: ${version}`);
-                resolve(version);
             }
         });
     },
@@ -290,15 +289,30 @@ const usbLib = {
         // Send the query
         await this.sendCommand("GETCFG", 256);
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 if (result.data.buffer.byteLength !== 256) {
                     reject('Invalid GETCFG response, byteLength: ' + result.data.buffer.byteLength);
+                } else {
+                    const cfgData = new Uint8Array(result.data.buffer);
+                    const cfg = btoa(String.fromCharCode.apply(null, cfgData));
+                    await usbLib.printOut(`cfg: ${cfg}`);
+                    resolve(result.data.buffer);
                 }
-                const cfg = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
-                usbLib.printOut(`cfg: ${cfg}`);
-                resolve();
             }
         });
+    },
+    getConfigObject: async function () {
+        const cfgData = await this.getCfg();
+        const d = new DataView(cfgData);
+        const result = {
+            calibration: [
+                {cpm: d.getUint16(0x08), sv: d.getFloat32(0x0a, true)},
+                {cpm: d.getUint16(0x0e), sv: d.getFloat32(0x10, true)},
+                {cpm: d.getUint16(0x14), sv: d.getFloat32(0x16, true)},
+            ],
+        };
+        console.log(result);
+        return result;
     },
     /**
      * Get year date and time
@@ -315,13 +329,14 @@ const usbLib = {
         const ss = d.getSeconds();
         await this.sendCommandParam(`SETDATETIME`, [yy, mm, dd, hh, mi, ss]);
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 [check] = new Uint8Array(result.data.buffer);
                 if (check !== 0xaa) {
                     reject('Invalid SETDATETIME response');
+                } else {
+                    await usbLib.printOut(`Datetime setted.`);
+                    resolve();
                 }
-                usbLib.printOut(`Datetime setted.`);
-                resolve();
             }
         });
     },
@@ -333,13 +348,14 @@ const usbLib = {
     getDateTime: async function () {
         await this.sendCommand("GETDATETIME");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 let [yy, mm, dd, hh, mi, ss, check] = new Uint8Array(result.data.buffer);
                 if (check !== 0xaa) {
                     reject('Invalid GETDATETIME response');
+                } else {
+                    await usbLib.printOut(`Date time: ${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`);
+                    resolve();
                 }
-                usbLib.printOut(`Date time: ${dd}/${mm}/${yy} ${hh}:${mi}:${ss}`);
-                resolve();
             }
         });
     },
@@ -351,13 +367,14 @@ const usbLib = {
     getTemp: async function () {
         await this.sendCommand("GETTEMP");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 let [intTemp, decTemp, negSigne, check] = new Uint8Array(result.data.buffer);
                 if (check !== 0xaa) {
                     reject('Invalid GETTEMP response');
+                } else {
+                    await usbLib.printOut("Temp: " + (negSigne > 0 ? "" : "-") + intTemp + "." + decTemp);
+                    resolve();
                 }
-                usbLib.printOut("Temp: " + (negSigne > 0 ? "" : "-") + intTemp + "." + decTemp);
-                resolve();
             }
         });
     },
@@ -369,16 +386,17 @@ const usbLib = {
     getGyro: async function () {
         await this.sendCommand("GETGYRO");
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 [x_msb, x_lsb, y_msb, y_lsb, z_msb, z_lsb, check] = new Uint8Array(result.data.buffer);
                 if (check !== 0xaa) {
                     reject('Invalid GETGYRO response');
+                } else {
+                    const x = x_msb << 8 | x_lsb;
+                    const y = y_msb << 8 | y_lsb;
+                    const z = z_msb << 8 | z_lsb;
+                    await usbLib.printOut(`Gyro: ${x}, ${y}, ${z}`);
+                    resolve();
                 }
-                const x = x_msb << 8 | x_lsb;
-                const y = y_msb << 8 | y_lsb;
-                const z = z_msb << 8 | z_lsb;
-                usbLib.printOut(`Gyro: ${x}, ${y}, ${z}`);
-                resolve();
             }
         });
     },
@@ -448,10 +466,10 @@ const usbLib = {
     sendCommandText: async function (command) {
         await this.sendCommand(command);
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 const size = result.data.buffer.byteLength;
                 const text = usbLib.decoder.decode(result.data.buffer);
-                usbLib.printOut(`Default Reader: ${text}
+                await usbLib.printOut(`Default Reader: ${text}
       Size: ${size}`);
             }
         });
@@ -474,13 +492,14 @@ const usbLib = {
         await this.sendCommandParam("SPIR", data, dataLength);
 
         return new Promise((resolve, reject) => {
-            usbLib.resultReader = (result) => {
+            usbLib.resultReader = async (result) => {
                 if (result.data.buffer.byteLength != dataLength) {
                     reject('Invalid SPIR response, byteLength: ' + result.data.buffer.byteLength);
+                } else {
+                    const r = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
+                    await usbLib.printOut(`spir: ${r}`);
+                    resolve(new Uint8Array(result.data.buffer));
                 }
-                const r = btoa(String.fromCharCode.apply(null, new Uint8Array(result.data.buffer)));
-                usbLib.printOut(`spir: ${r}`);
-                resolve(new Uint8Array(result.data.buffer));
             }
         });
     },
@@ -711,4 +730,8 @@ const usbLib = {
         }
         return closeCtx(ctx);
     }
+}
+
+if (window) {
+    window.usbLib = usbLib;
 }
