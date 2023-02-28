@@ -83,8 +83,35 @@ const usbLib = {
         this.resultReader = null;
     },
     configureCH341: async function () {
-        await this.device.open();
-        await this.device.claimInterface(0);
+        try {
+            await this.device.open();
+        } catch (e) {
+            throw {
+                name:        "ConfigError",
+                message:     "Failed to open the device. Please setup the device first.",
+            };
+        }
+
+        await this.device.selectConfiguration(1);
+        const config = this.device.configuration;
+        if (config) {
+            console.log(`La configuration a été sélectionnée : ${config.configurationValue}`);
+        } else {
+            console.log("La configuration n'a pas pu être sélectionnée.");
+        }
+        const interf = config.interfaces[0];
+        if (interf.claimed) {
+            console.log("L'interface a déjà été claimée.");
+        } else {
+            console.log("L'interface n'a pas encore été claimée.");
+        }
+        if (interf.active) {
+            console.log("L'interface est actuellement utilisée par une autre application.");
+        } else {
+            console.log("L'interface n'est pas utilisée par une autre application.");
+        }
+        await this.device.claimInterface(interf.interfaceNumber);
+
         // SET BAUDRATE
         let res = await this.device.controlTransferOut({
             requestType: 'vendor',
@@ -121,8 +148,7 @@ const usbLib = {
         }, 2);
         console.debug(res);
 
-        await this.device.selectConfiguration(1);
-        await this.device.claimInterface(this.device.configuration.interfaces[0].interfaceNumber);
+
 
         this.startListening = true;
         this.transfertIn();
@@ -558,32 +584,32 @@ const usbLib = {
         let timestamps = [];
         let units = [];
         for (let i = start; i < end; i++) {
-            console.log("Current pos: " + i)
+            //console.log("Current pos: " + i)
             let tagStart = !(d.getUint8(i) ^ 0x55 || d.getUint8(i + 1) ^ 0xAA);
             if (tagStart) {
                 let tagType = d.getUint8(i + 2);
                 switch (tagType) {
                     case 0x00:
-                        console.log("found timestamp");
+                        //console.log("found timestamp");
                         let [t, freq, jmp2] = this.readTimestampFromMemory(d.buffer, d.byteOffset + i);
                         currentTime = t;
                         incrementTime = this.decodeFreqDelta[freq];
                         unit = this.decodeFreq[freq];
-                        console.log(t);
-                        console.log(unit);
+                        //console.log(t);
+                        //console.log(unit);
                         i += jmp2 - 1;
                         break;
                     case 0x01:
-                        console.log("found 01");
+                        //console.log("found 01");
                         let twobyte = d.getUint16(i + 3);
-                        console.log("twobyte: " + twobyte);
+                        //console.log("twobyte: " + twobyte);
                         i += 4;
                         break;
                     case 0x02:
                         let [txt, jmp] = this.readAscii(d, i);
                         strings.push(txt);
-                        console.log("found " + txt);
-                        console.log("from " + i + " jump " + jmp);
+                        //console.log("found " + txt);
+                        //console.log("from " + i + " jump " + jmp);
                         i += jmp - 1;
                         break;
                     default:
@@ -592,7 +618,7 @@ const usbLib = {
             } else {
                 currentTime = new Date(currentTime.getTime() + incrementTime);
                 let value = d.getUint8(i);
-                console.log("value: " + d.getUint8(i), currentTime);
+                //console.log("value: " + d.getUint8(i), currentTime);
                 measurements.push(value);
                 timestamps.push(currentTime);
                 units.push(unit);
@@ -611,7 +637,7 @@ const usbLib = {
     },
     readMemory: async function () {
 
-        return fetch('/memory_dump.bin')
+        return fetch('/gqmc_7_01_24.mem')
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`HTTP error, status = ${response.status}`);
@@ -621,7 +647,9 @@ const usbLib = {
             .then((buffer) => {
                 const tramesPos = this.findDataTrames(buffer);
                 let dataTrames = this.detectSessions(tramesPos, buffer);
-                return dataTrames.map(t => this.blocks(t.pos, buffer));
+                let res = dataTrames.map(t => this.blocks(t.pos, buffer));
+                console.log(res);
+                return res;
             });
     },
     detectSessions: function (data, buffer) {

@@ -118,7 +118,7 @@ var RootComponent = {
             data.addColumn('number', 'Radioactivity (CPS)');
 
             dataMems = await usbLib.readMemory();
-            dataMem = dataMems[0];
+            dataMem = dataMems[1];
 
             const cpsValues = dataMem.measurements;
             const timestamps = dataMem.timestamps;
