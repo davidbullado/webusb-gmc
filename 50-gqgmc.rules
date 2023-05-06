@@ -1,0 +1,1 @@
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", MODE="0664", GROUP="plugdev", RUN+="/bin/sh -c 'echo -n $kernel > /sys/bus/usb/drivers/ch341/unbind'"
